@@ -1,5 +1,3 @@
----
-
 ```markdown
 # URL Shortener API
 
