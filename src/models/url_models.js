@@ -24,11 +24,6 @@ const urlSchema = new mongoose.Schema({
     lastVisitedAt: {
         type: Date,
         default: null
-    },
-    createdAt: {
-        type: Date,
-        default: new Date(),
-        immutable: true
     }
 }, { timestamps: true });
 

@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import databaseConnection from "./src/config/database.js";
+import databaseConnection from "./src/config/db.js";
 import app from "./src/app.js"
 
 dotenv.config({path: "./.env"});
