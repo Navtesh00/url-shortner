@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { isValidCode } from "@/lib/validators";
 
 export default function StatsLookup() {
+  const router = useRouter();
   const [code, setCode] = useState("");
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -12,7 +14,7 @@ export default function StatsLookup() {
     const value = code.trim();
     if (isValidCode(value)) {
       setCode("");
-      window.location.href = `/stats/${value}`;
+      router.push(`/stats/${value}`);
     }
   }
 
@@ -27,8 +29,8 @@ export default function StatsLookup() {
           value={code}
           onChange={(e) => setCode(e.target.value)}
           minLength={6}
-          maxLength={10}
-          pattern="[A-Za-z0-9]+"
+          maxLength={6}
+          pattern="[A-Za-z0-9]{6}"
           placeholder="e.g. aB3xK9"
           className="flex-1 rounded-lg border border-input bg-background px-4 py-2.5 font-mono text-sm tracking-wide placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />

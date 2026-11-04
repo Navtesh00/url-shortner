@@ -19,9 +19,9 @@ export function CountUp({
     function frame(now: number) {
       const t = Math.min((now - start) / duration, 1);
       const eased = 1 - Math.pow(1 - t, 3);
-      el.textContent = String(Math.round(target * eased));
+      el!.textContent = String(Math.round(target * eased));
       if (t < 1) requestAnimationFrame(frame);
-      else el.textContent = String(target);
+      else el!.textContent = String(target);
     }
 
     requestAnimationFrame(frame);

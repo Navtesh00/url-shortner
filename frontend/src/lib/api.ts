@@ -40,7 +40,7 @@ async function request<T>(path: string, init?: RequestInit, origin?: string | nu
   if (typeof window === "undefined") {
     // Server-side: undici needs an absolute URL. The /backend rewrite only
     // applies to browser navigation, so resolve against the request origin.
-    const o = origin ?? `http://localhost:${process.env.PORT ?? 3001}`;
+    const o = origin ?? `http://localhost:${process.env.PORT ?? 3000}`;
     url = `${o}${PROXY}${path}`;
   } else {
     url = `${PROXY}${path}`;
@@ -68,7 +68,7 @@ async function request<T>(path: string, init?: RequestInit, origin?: string | nu
 }
 
 export function shortenUrl(longURL: string): Promise<UrlRecord> {
-  return request<{ message: string; url: UrlRecord }>("/api/shorten", {
+  return request<{ message: string; url: UrlRecord }>("/api/url_shortener", {
     method: "POST",
     body: JSON.stringify({ longURL }),
   }).then((data) => data.url);
@@ -76,7 +76,7 @@ export function shortenUrl(longURL: string): Promise<UrlRecord> {
 
 export function fetchUrlStats(code: string, origin?: string | null): Promise<UrlRecord> {
   return request<{ message: string; url: UrlRecord }>(
-    `/api/shorten/${encodeURIComponent(code)}/stats`,
+    `/api/${encodeURIComponent(code)}/stats`,
     undefined,
     origin
   ).then((data) => data.url);

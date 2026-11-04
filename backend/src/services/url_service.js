@@ -4,10 +4,6 @@ import { getCachedUrl, getCachedNotFoundUrl, setCacheUrl, setCacheNotFoundUrl, t
 import { isValidCode } from "../utils/validators.js";
 import { AppError } from "../utils/errors.js";
 
-const updateCacheTimer = setInterval(async () => {
-
-}, 60 * 30 * 1000);
-
 const generateUniqueShortCode = async () => {
     let shortURL = generateShortCode();
 

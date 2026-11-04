@@ -142,3 +142,10 @@ dist
 #PRD.md
 
 PRD.md
+
+# Agent and workflow docs
+AGENTS.md
+WORKFLOW.md
+
+# OpenCode config
+opencode.json

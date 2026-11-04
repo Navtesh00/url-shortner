@@ -4,10 +4,10 @@ import { shortenUrl, redirectToLongUrl, fetchUrlStats } from "../controllers/url
 const router = Router();
 
 // API endpoint to shorten a URL
-router.post("/api/shorten", shortenUrl);
+router.post("/api/url_shortener", shortenUrl);
 
 // API endpoint to get URL statistics
-router.get("/api/shorten/:code/stats", fetchUrlStats);
+router.get("/api/:code/stats", fetchUrlStats);
 
 // URL redirection
 router.get("/:code", redirectToLongUrl);

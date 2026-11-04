@@ -4,7 +4,11 @@ import Url from "../models/url_models.js";
 const CACHE_TTL_SECONDS = 60 * 60 * 24;
 const CACHE_NOT_FOUND_TTL_SECONDS = 60 * 30;
 
-const key_prefix = "urlShortener:dev";
+const key_prefix = (process.env.KEY_PREFIX || "urlShortener:dev")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/;+$/, "")
+    .trim() || "urlShortener:dev";
 
 const cacheKey = (code) => `${key_prefix}:url:${code}`;
 const cacheNotFoundKey = (code) => `${key_prefix}:notFound:${code}`;
@@ -32,13 +36,13 @@ export const setCacheUrl = async (code, url) => {
         lastVisitedAt: url.lastVisitedAt ?? null,
     };
 
-    await client.hset(key, record);
+    await client.set(key, JSON.stringify(record), "EX", CACHE_TTL_SECONDS);
 }
 
 /** Fire-and-forget: keep the visit counter climbing even on cached redirects. */
 export const touchVisits = (code) => {
     Url.findOneAndUpdate(
-        { shortURL: code }, 
+        { shortURL: code },
         { $inc: { totalVisits: 1 }, $set: { lastVisitedAt: new Date() } },
         { returnDocument: 'after' }
     )

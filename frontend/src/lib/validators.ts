@@ -1,5 +1,5 @@
 /** Mirrors the rules in backend/src/utils/validators.js */
-const CODE_PATTERN = /^[a-zA-Z0-9]{6,10}$/;
+const CODE_PATTERN = /^[a-zA-Z0-9]{6}$/;
 
 export function isValidHttpUrl(value: string): boolean {
   if (value.trim() === "") return false;

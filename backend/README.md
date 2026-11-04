@@ -69,9 +69,9 @@ npm start
 
 | Method | Endpoint                        | Description                    |
 |--------|----------------------------------|--------------------------------|
-| POST   | `/api/shorten`                   | Create a short URL             |
+| POST   | `/api/url_shortener`             | Create a short URL             |
 | GET    | `/:code`                         | Redirect to original URL       |
-| GET    | `/api/shorten/:code/stats`       | Get statistics of a short URL  |
+| GET    | `/api/:code/stats`               | Get statistics of a short URL  |
 
 ## 📝 Notes
 

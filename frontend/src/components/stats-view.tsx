@@ -7,33 +7,44 @@ import { formatAbsolute, formatRelative } from "@/lib/format";
 import { CopyField } from "@/components/copy-field";
 import { CountUp } from "@/components/count-up";
 
-export function StatsView({ record }: { record: {
-  _id: string;
-  longURL: string;
-  shortURL: string;
-  totalVisits: number;
-  lastVisitedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-} }) {
+export function StatsView({ record }: {
+  record: {
+    _id: string;
+    longURL: string;
+    shortURL: string;
+    totalVisits: number;
+    lastVisitedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }
+}) {
   const shortLink = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}/${record.shortURL}`;
 
   // Render a deterministic absolute timestamp first so SSR and client match,
   // then swap to a live relative string after hydration.
-  const [label, setLabel] = useState(
+  const [label, setLabel] = useState<string>(
     record.lastVisitedAt ? formatAbsolute(record.lastVisitedAt) : "Never"
   );
 
   useEffect(() => {
-    if (!record.lastVisitedAt) return;
+    const lastVisitedAt = record.lastVisitedAt;
 
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const tick = () => setLabel(formatRelative(record.lastVisitedAt));
-    tick();
-    timer = setInterval(tick, 60_000);
-    return () => clearInterval(timer);
+    if (!lastVisitedAt) {
+      const id = setTimeout(() => setLabel("Never"), 0);
+      return () => clearTimeout(id);
+    }
+
+    const tick = () => setLabel(formatRelative(lastVisitedAt));
+
+    // Defer the first update so we never call setState synchronously in the
+    // effect body (keeps React 19's cascading-render lint happy).
+    const id = setTimeout(tick, 0);
+    const timer = setInterval(tick, 60_000);
+    return () => {
+      clearTimeout(id);
+      clearInterval(timer);
+    };
   }, [record.lastVisitedAt]);
-
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 px-4 py-8">
       <div className="text-center">

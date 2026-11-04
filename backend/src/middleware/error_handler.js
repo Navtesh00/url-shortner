@@ -23,6 +23,11 @@ export const errorHandler = (err, req, res, next) => {
         return res.status(400).json({ message: err.message });
     }
 
+    //Malformed JSON body
+    if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+        return res.status(400).json({ message: "Invalid JSON body" });
+    }
+
     //Internal server error handling
     return res.status(500).json({
         message: err.message ?? "Internal server error",
