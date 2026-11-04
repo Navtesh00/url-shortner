@@ -1,6 +1,6 @@
 import Url from "../models/url_models.js";
 import generateShortCode from "./generate_code.js";
-import { getCachedUrl, getCachedNotFoundUrl, setCacheUrl, setCacheNotFoundUrl, touchVisits } from "./url_cache_service.js";
+import { getCachedUrl, getCachedNotFoundUrl, setCacheUrl, setCacheNotFoundUrl } from "./url_cache_service.js";
 import { isValidCode } from "../utils/validators.js";
 import { AppError } from "../utils/errors.js";
 
@@ -42,20 +42,14 @@ export const resolveLongUrl = async (code) => {
     let cached;
     try {
         cached = await getCachedUrl(code);
-        if (cached) {
-            // Count the visit even when the redirect is served from cache.
-            touchVisits(code);
-            return cached.longURL;
+        if (cached?._id) {
+            return cached;
         }
     } catch {
         console.log("Failed to get cached URL");
     }
 
-    const url = await Url.findOneAndUpdate(
-        { shortURL: code },
-        { $inc: { totalVisits: 1 }, $set: { lastVisitedAt: new Date() } },
-        { new: true }
-    );
+    const url = await Url.findOne({ shortURL: code });
 
     if (!url) {
         await setCacheNotFoundUrl(code);
@@ -68,7 +62,7 @@ export const resolveLongUrl = async (code) => {
         console.log("Failed to set cached URL");
     }
 
-    return url.longURL;
+    return url;
 }
 
 export const getUrlStats = async (code) => {
@@ -81,7 +75,6 @@ export const getUrlStats = async (code) => {
         throw new AppError("URL not found", 404);
     }
 
-    // Always read live counts from the DB so the stats page is accurate,
     // even when a redirect served the visit from cache.
     const url = await Url.findOne({ shortURL: code });
 

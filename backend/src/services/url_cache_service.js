@@ -30,6 +30,7 @@ export const getCachedUrl = async (code) => {
 export const setCacheUrl = async (code, url) => {
     const key = cacheKey(code);
     const record = {
+        _id: url._id,
         longURL: url.longURL,
         shortURL: url.shortURL,
         totalVisits: url.totalVisits ?? 0,
@@ -38,19 +39,6 @@ export const setCacheUrl = async (code, url) => {
 
     await client.set(key, JSON.stringify(record), "EX", CACHE_TTL_SECONDS);
 }
-
-/** Fire-and-forget: keep the visit counter climbing even on cached redirects. */
-export const touchVisits = (code) => {
-    Url.findOneAndUpdate(
-        { shortURL: code },
-        { $inc: { totalVisits: 1 }, $set: { lastVisitedAt: new Date() } },
-        { returnDocument: 'after' }
-    )
-        .then((updated) => {
-            if (updated) setCacheUrl(code, updated).catch(() => { });
-        })
-        .catch(() => { });
-};
 
 export const getCachedNotFoundUrl = async (code) => {
     const key = cacheNotFoundKey(code);
