@@ -1,352 +1,317 @@
-# URL Shortener
+<div align="center">
 
-Turn long, unwieldy URLs into short, trackable links — with Redis-accelerated redirects and built-in visit analytics.
+# 🔗 URL Shortener
 
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Express](https://img.shields.io/badge/Express-5.x-339933?logo=express&logoColor=white)](https://expressjs.com)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose%209-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com)
-[![Redis](https://img.shields.io/badge/Redis-ioredis%206-DC382D?logo=redis&logoColor=white)](https://redis.io)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)](https://nextjs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-frontend-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![License](https://img.shields.io/badge/License-MIT-9ca3af)](#license)
+**Long URLs in. Short links out. Fast redirects, async analytics.**
+
+A full-stack URL shortener — **Next.js** frontend, **Express** API, **MongoDB** persistence, **Redis** cache-first redirects, and **BullMQ** background visit tracking.
+
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/API-Express-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![Next.js](https://img.shields.io/badge/Web-Next.js-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/Frontend-TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
+[![MongoDB](https://img.shields.io/badge/Data-MongoDB-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Redis](https://img.shields.io/badge/Cache-Redis-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![BullMQ](https://img.shields.io/badge/Jobs-BullMQ-CB3837)](https://docs.bullmq.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-9CA3AF)](./LICENSE)
+
+<!-- Uncomment once the workflow exists:
+[![CI](https://github.com/<your-org>/<your-repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-org>/<your-repo>/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-0%25-lightgrey)](#testing)
+-->
+
+[🚀 Quick start](#-quick-start) · [🏗 Architecture](#️-architecture) · [📡 API](#-api-reference) · [🩺 Troubleshooting](#-troubleshooting) · [🗺 Roadmap](#️-roadmap)
+
+</div>
+
+> **TL;DR** — Start Mongo + Redis (`docker compose up -d`), run `npm install && npm run dev` in `backend/`, `npm run worker:dev` in a second terminal, then `npm install && npm run dev` in `frontend/`. Open [localhost:3000](http://localhost:3000). Full steps → [Quick start](#-quick-start).
+
+> **Status:** 🟢 V1 implementation — core features shipped. Backend `tests/unit` and `tests/integration` are scaffolded; automated coverage is still to be added.
+>
+> **Demo:** _No public demo yet._ Add a deployed link here when available.
+
+<p align="center">
+  <!-- Drop a screenshot or 5s GIF at docs/screenshot.png and uncomment: -->
+  <!-- <img src="docs/screenshot.png" alt="URL Shortener UI" width="780" /> -->
+</p>
 
 ---
 
-## Table of Contents
+## 📑 Contents
 
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [API Reference](#api-reference)
-- [Data Model](#data-model)
-- [Caching Strategy](#caching-strategy)
-- [Error Handling](#error-handling)
-- [Available Scripts](#available-scripts)
-- [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+<details>
+<summary>Jump to a section</summary>
+
+1. [Why this project](#-why-this-project)
+2. [Features](#-features)
+3. [Quick start](#-quick-start)
+4. [Architecture](#️-architecture)
+5. [API reference](#-api-reference)
+6. [Engineering notes](#-engineering-notes)
+7. [Project structure](#-project-structure)
+8. [Scripts and testing](#-scripts-and-testing)
+9. [Deployment and security](#-deployment-and-security)
+10. [Troubleshooting](#-troubleshooting)
+11. [FAQ and glossary](#-faq-and-glossary)
+12. [Roadmap](#️-roadmap)
+13. [Contributing](#-contributing)
+14. [Acknowledgements](#-acknowledgements)
+15. [License](#-license)
+
+</details>
 
 ---
 
-## Overview
+## 🚀 Why this project
 
-A full-stack URL shortener in a monorepo: a **Node.js/Express REST API** that issues short codes, serves fast redirects, and counts visits, paired with a **Next.js (App Router) frontend** for shortening links and browsing statistics.
+URL shortening is a tiny product with genuinely interesting engineering behind it: safe input validation, collision-resistant identifiers, cache-first reads, asynchronous analytics, and a clean separation between the UI and the API.
 
-**How it works in three steps:**
+This repository shows how those parts fit together — while keeping the redirect path independent from slower visit-count writes, so redirects never block on a database update.
 
-1. The user submits a long URL through the frontend (or directly via `POST /api/url_shortener`).
-2. The backend validates it, generates a unique **6-character alphanumeric code** (`A–Z a–z 0–9`, via NanoID) with retry-on-collision, and persists it in MongoDB.
-3. Anyone opening `http://<backend>/{code}` gets a `302` redirect — resolved **Redis-first** for speed — while visit counters are incremented asynchronously in the background.
+### At a glance
 
-## Key Features
-
-- **Short code generation** — 6-character alphanumeric codes via `nanoid` custom alphabet, with automatic retry when a collision occurs
-- **Strict URL validation** — only absolute `http://` / `https://` URLs are accepted (backend and frontend validate with mirrored rules)
-- **Redis caching layer** — URL records cached as hashes for fast redirects; not-found results cached briefly with a TTL so dead codes never hammer MongoDB
-- **Non-blocking visit tracking** — visits on cached redirects are incremented fire-and-forget (`touchVisits`); the redirect is never held up by a write
-- **Visit statistics** — total visits plus last-visited timestamp per link, exposed via a dedicated stats endpoint
-- **CORS-free development** — the Next.js dev server proxies `/backend/*` to the API, so the browser never talks cross-origin to `:3001`
-- **Server-rendered stats page** — stats are fetched server-side, with hydration-safe relative/absolute timestamps
-- **Robust error handling** — a custom `AppError` class plus central middleware that normalizes MongoDB duplicate keys, `CastError`, and validation failures into clean JSON responses
-- **Queue infrastructure ready** — BullMQ queue + worker wired for future async jobs (analytics rollups, expiry, notifications)
-
-## Tech Stack
-
-### Backend
-
-| Technology | Version | Purpose |
-|---|---|---|
-| Node.js + Express | 20+ / 5.x | HTTP server and routing |
-| MongoDB + Mongoose | 8+ / 9.x | Primary data store (URL records) |
-| Redis + ioredis | 6+ / 6.x | Redirect and not-found caching |
-| BullMQ | 6.x | Job queue infrastructure (async-ready) |
-| NanoID | latest | Short code generation |
-| dotenv | latest | Environment configuration |
-
-### Frontend
-
-| Technology | Version | Purpose |
-|---|---|---|
-| Next.js (App Router) | 16.3.6 | SSR pages, API proxy rewrites |
-| React | 19.2.8 | UI framework |
-| TypeScript | 5.x | Type safety |
-| Tailwind CSS | 4.x | Styling (CSS-variable dark theme) |
-| shadcn/ui (Radix UI) | latest | Accessible component primitives |
-| Lucide React | latest | Iconography |
-| Motion | latest | UI animations |
-| sonner | latest | Toast notifications |
-
-## Architecture
-
-```
-        ┌──────────────────────────────────────────────────┐
-        │                 BROWSER (user)                   │
-        │  • paste URL → shorten form                      │
-        │  • open short link → 302 → original page         │
-        │  • look up stats by code                         │
-        └────────────────────────┬─────────────────────────┘
-                                 │
-             ┌───────────────────┴───────────────────┐
-             │      Next.js 16 frontend (:3000)      │
-             │   SSR stats pages · shorten form      │
-             │   proxies /backend/* → API (no CORS)  │
-             └───────────────────┬───────────────────┘
-                                 │ HTTP
-             ┌───────────────────┴───────────────────┐
-             │        Express 5 API (:3001)          │
-             │  Routes → Controllers → Services      │
-             └───────┬───────────────────────┬───────┘
-                     │                       │
-        ┌────────────▼─────────┐   ┌─────────▼────────────┐
-        │       MongoDB        │   │        Redis         │
-        │   source of truth    │   │  redirect cache +    │
-        │  (Mongoose models)   │   │  not-found TTLs +    │
-        │                      │   │  async visit bumps   │
-        └──────────────────────┘   └──────────────────────┘
-```
-
-**Redirect flow (`GET /:code`):**
-
-```
-1. controller validates code format (6 alphanumeric chars)
-2. service checks Redis  ── hit ──────▶ 302 + fire-and-forget visit bump
-3. cache miss ──────────▶ query MongoDB by shortURL
-4. found ────────────────▶ cache document in Redis ──▶ 302
-5. not found ────────────▶ cache short-lived not-found marker ──▶ 404
-```
-
-**Layer responsibilities (backend):**
-
-| Layer | Files | Responsibility |
-|---|---|---|
-| Routes | `src/routes/url_routes.js` | HTTP verbs, paths, controller wiring |
-| Controllers | `src/controllers/url_controllers.js` | Request validation, response shaping (status codes, payloads) |
-| Services | `src/services/url_service.js`, `generate_code.js`, `url_cache_service.js` | Business logic: code generation, collision retry, cache-first resolution, visit counting |
-| Models | `src/models/url_models.js` | Mongoose schema, indexes, constraints |
-| Middleware | `src/middleware/error_handler.js` | Central error normalization (AppError, Mongo 11000, CastError, validation) |
-| Config | `src/config/db.js`, `redis.js`, `bullMQ.js` | Connection lifecycles for MongoDB, Redis, and the job queue |
-| Utils | `src/utils/validators.js`, `errors.js` | URL/code validators, `AppError` class |
-
-**Quick links (development):**
-
-| What | Where |
+| | |
 |---|---|
-| Frontend | `http://localhost:3000` |
-| API | `http://localhost:3001` |
-| Short link format | `http://localhost:3001/{code}` (case-sensitive) |
-| Shorten pages | `/` and `/shorten` |
-| Stats lookup | `/stats` → `/stats/{code}` |
+| **3 API operations** | Create a short link · redirect · retrieve statistics |
+| **6-character codes** | Case-sensitive, ~5.7 × 10¹⁰ possible codes |
+| **Full-stack design** | Next.js frontend + layered Express API |
+| **Performance model** | Redis-first redirects · MongoDB source of truth · BullMQ visit jobs |
+| **Developer ergonomics** | Zero-config local proxy · `.env.example` files · `docker compose` for infrastructure |
 
-## Project Structure
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
 
-```
-url-shortener-api/
-├── backend/
-│   ├── server.js                    # entry point: env → Mongo → Express
-│   ├── .env                         # local environment (not committed)
-│   ├── src/
-│   │   ├── app.js                   # Express app: middleware, routes, error handler
-│   │   ├── config/
-│   │   │   ├── db.js                # Mongoose connection (Mongo_URI)
-│   │   │   ├── redis.js             # ioredis client (REDIS_HOST/PORT)
-│   │   │   └── bullMQ.js            # queue + worker ("redis-job-queue")
-│   │   ├── controllers/
-│   │   │   └── url_controllers.js   # shortenUrl · redirectToLongUrl · fetchUrlStats
-│   │   ├── middleware/
-│   │   │   └── error_handler.js     # central JSON error responses
-│   │   ├── models/
-│   │   │   └── url_models.js        # URL schema (see Data Model)
-│   │   ├── routes/
-│   │   │   └── url_routes.js        # /api/url_shortener · /:code
-│   │   ├── services/
-│   │   │   ├── url_service.js       # create/resolve/count logic
-│   │   │   ├── generate_code.js     # nanoid 6-char alphanumeric codes
-│   │   │   └── url_cache_service.js # Redis read/write, not-found TTLs, touchVisits
-│   │   └── utils/
-│   │       ├── validators.js        # isValidUrl · isValidCode
-│   │       └── errors.js            # AppError(statusCode, message)
-│   └── tests/
-│       ├── unit/
-│       └── integration/
-├── frontend/
-│   ├── next.config.ts               # Turbopack root + /backend rewrites
-│   ├── components.json              # shadcn/ui configuration
-│   ├── tsconfig.json                # @/* path aliases
-│   ├── .env.local                   # BACKEND_URL · NEXT_PUBLIC_API_URL
-│   └── src/
-│       ├── app/
-│       │   ├── layout.tsx           # root layout, fonts, dark theme
-│       │   ├── globals.css          # Tailwind v4 + CSS variables
-│       │   ├── page.tsx             # home: form + stats lookup link
-│       │   ├── shorten/page.tsx     # dedicated shorten page
-│       │   └── stats/
-│       │       ├── page.tsx         # code lookup form
-│       │       └── [code]/page.tsx  # SSR stats page
-│       ├── components/
-│       │   ├── shorten-form.tsx     # create form + result (copy/open/stats)
-│       │   ├── copy-field.tsx       # copy-to-clipboard with feedback
-│       │   ├── count-up.tsx         # animated number counter
-│       │   └── stats-view.tsx       # clicks, last visit, links
-│       └── lib/
-│           ├── api.ts               # SSR/client-aware API client
-│           ├── validators.ts        # mirrors backend validation rules
-│           └── format.ts            # truncation + timestamp formatting
-└── PRD.md                           # V1 product specification
-```
+---
 
-## Getting Started
+## ✨ Features
 
-### Prerequisites
-
-| Requirement | Version | Notes |
+| | Capability | What it does |
 |---|---|---|
-| Node.js | ≥ 20 | LTS recommended |
-| npm | ≥ 10 | or pnpm/yarn |
-| MongoDB | 6+ | local instance or free Atlas cluster |
-| Redis | 6+ | local install or Docker |
+| 🔗 | **Short links** | Generates six-character codes and retries automatically on collision. |
+| ✅ | **URL validation** | Accepts only absolute `http://` / `https://` URLs — rules mirrored on frontend and backend. |
+| ⚡ | **Cache-first redirects** | Looks up link data in Redis before falling back to MongoDB. |
+| 📈 | **Visit statistics** | Returns total visits and last-visited timestamp per code. |
+| ⚙️ | **Async visit tracking** | Enqueues visit increments through BullMQ so the redirect returns without waiting on a write. |
+| 🧱 | **Layered API** | Routes → Controllers → Services → Models, with centralized error handling. |
+| 🖥️ | **SSR stats page** | Server-rendered Next.js page with hydration-safe timestamps. |
+| 🔁 | **Local API proxy** | Next.js rewrites route `/backend/*` to the API — no cross-origin calls in dev. |
 
-No MongoDB or Redis yet? Run them with Docker:
+> **🧠 Analytics note:** visit updates are asynchronous. A fresh click may take a moment to appear in statistics, and the worker must be running for queued updates to be processed.
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## ⚡ Quick start
+
+### Requirements
+
+| Requirement | Notes |
+|---|---|
+| **Node.js 20+** | npm is bundled |
+| **MongoDB 6+** | Local or hosted (Atlas) |
+| **Redis 6+** | Local or hosted |
+| **Docker** *(optional)* | Simplest way to run Mongo + Redis locally |
+
+<details>
+<summary><strong>Start infrastructure with Docker (recommended)</strong></summary>
+
+Create `docker-compose.yml` at the repo root:
+
+```yaml
+services:
+  mongo:
+    image: mongo:8
+    ports: ["27017:27017"]
+    volumes: ["mongo-data:/data/db"]
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes: ["redis-data:/data"]
+volumes:
+  mongo-data:
+  redis-data:
+
+Then:
 
 ```bash
-docker run -d --name mongo  -p 27017:27017 mongo:8
-docker run -d --name redis  -p 6379:6379  redis:7-alpine
+docker compose up -d
 ```
 
-### 1. Clone the repository
+Or run them ad hoc:
 
 ```bash
-git clone <your-repo-url> url-shortener-api
-cd url-shortener-api
+docker run -d --name mongo -p 27017:27017 mongo:8
+docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
-### 2. Configure the backend
+</details>
 
-Create `backend/.env`:
+### 1. Configure and start the backend
 
-```env
-PORT=3001
-# Local instance or your MongoDB Atlas connection string
-Mongo_URI=mongodb://127.0.0.1:27017/url_shortener
-REDIS_HOST=localhost
-REDIS_PORT=6379
-# Namespace for all Redis keys
-KEY_PREFIX=urlShortener:dev
-```
-
-### 3. Install and run the backend
+Copy the example env file and adjust if needed:
 
 ```bash
 cd backend
+cp .env.example .env
 npm install
-npm run dev        # nodemon — auto-restarts on change
+npm run dev
 ```
 
-The API is now available at `http://localhost:3001`.
+`backend/.env.example`:
 
-### 4. Configure the frontend
+```env
+PORT=3001
+# NOTE: `Mongo_URI` casing is intentional — matches the code. Change both together.
+Mongo_URI=mongodb://127.0.0.1:27017/url_shortener
+REDIS_HOST=localhost
+REDIS_PORT=6379
+KEY_PREFIX=urlShortener:dev
+```
 
-Create `frontend/.env.local`:
+The API listens at `http://localhost:3001` by default.
+
+### 2. Start the visit-counting worker
+
+In a second terminal:
+
+```bash
+cd backend
+npm run worker:dev
+```
+
+> **💡 Tip:** without the worker, redirects still work — but visit counts won't increment.
+
+### 3. Configure and start the frontend
+
+```bash
+cd frontend
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+`frontend/.env.local.example`:
 
 ```env
 BACKEND_URL=http://localhost:3001
 NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
-- `BACKEND_URL` — server-side rewrite target for the `/backend/*` proxy (see `next.config.ts`)
-- `NEXT_PUBLIC_API_URL` — public origin used to **build short links** shown to the user
+Open [http://localhost:3000](http://localhost:3000).
 
-### 5. Install and run the frontend
+> **🔁 Proxy mapping:** a frontend request to `/backend/api/url_shortener` is rewritten to `http://localhost:3001/api/url_shortener`. Direct API examples later in this README use the backend origin (`:3001`).
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000` — paste a long URL and shorten it.
-
-### 6. Smoke-test the API
+### 4. Smoke-test the API
 
 ```bash
 # create
 curl -X POST http://localhost:3001/api/url_shortener \
   -H "Content-Type: application/json" \
-  -d '{"longURL":"https://www.example.com/some/very/long/path?with=parameters"}'
+  -d '{"longURL":"https://www.example.com/articles/a-long-page"}'
 
 # stats
 curl http://localhost:3001/api/aB3xK9/stats
 
-# redirect (follow to see the final URL)
+# redirect
 curl -i http://localhost:3001/aB3xK9
 ```
 
-### Production
+<details>
+<summary><strong>Windows <code>cmd.exe</code> variant</strong></summary>
 
-```bash
-# backend
-cd backend && npm start        # node server.js
+`cmd.exe` uses `^` for line continuation:
 
-# frontend
-cd frontend && npm run build && npm start
+```bat
+curl -X POST http://localhost:3001/api/url_shortener ^
+  -H "Content-Type: application/json" ^
+  -d "{\"longURL\":\"https://www.example.com/articles/a-long-page\"}"
 ```
 
-> **Important:** in production, set `NEXT_PUBLIC_API_URL` to the publicly reachable origin of your API (e.g. `https://api.example.com`) so the short links you generate actually resolve for end users.
+</details>
 
-## Environment Variables
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
 
-### Backend — `backend/.env`
+---
 
-| Variable | Example | Description |
-|---|---|---|
-| `PORT` | `3001` | Port the Express server listens on |
-| `Mongo_URI` | `mongodb://127.0.0.1:27017/url_shortener` | MongoDB connection string (local or Atlas) |
-| `REDIS_HOST` | `localhost` | Redis host |
-| `REDIS_PORT` | `6379` | Redis port |
-| `KEY_PREFIX` | `urlShortener:dev` | Namespace prefix for all Redis keys |
+## 🏗️ Architecture
 
-### Frontend — `frontend/.env.local`
+```mermaid
+flowchart LR
+    U[Browser] -->|UI and stats pages| W[Next.js frontend]
+    W -->|/backend/* rewrite| A[Express API]
+    U -->|Open short link| A
+    A -->|Read or populate cache| R[(Redis)]
+    A -->|Cache miss / persistence| M[(MongoDB)]
+    A -->|Enqueue visit update| Q[BullMQ queue]
+    Q -->|Processed asynchronously| WK[Visit worker]
+    WK -->|Update visit data| M
+```
 
-| Variable | Example | Description |
-|---|---|---|
-| `BACKEND_URL` | `http://localhost:3001` | Target of the `/backend/*` rewrite (server-side only) |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Public origin used to build short links (exposed to the browser) |
+### Redirect lifecycle
 
-## API Reference
+```mermaid
+sequenceDiagram
+    actor Visitor
+    participant API as Express API
+    participant Cache as Redis
+    participant DB as MongoDB
+    participant Queue as BullMQ
+    participant Worker as Visit worker
 
-Base URL: `http://localhost:3001` (use the `/backend` prefix when calling from the frontend dev server).
+    Visitor->>API: GET /:code
+    API->>Cache: Look up code
+    alt Cache hit
+        Cache-->>API: Cached record
+    else Cache miss
+        API->>DB: findOne(shortURL)
+        DB-->>API: URL record
+        API->>Cache: SET (with TTL)
+    end
+    API-->>Visitor: 302 Location: longURL
+    API-)Queue: enqueue update-visit-count
+    Queue-->>Worker: Deliver job
+    Worker->>DB: $inc totalVisits, $set lastVisitedAt
+```
+
+The redirect resolves via Redis first, MongoDB on a miss. Visit counting is decoupled: the 302 returns immediately and the worker persists the increment. Unknown codes return `404` and may be negatively cached briefly to protect MongoDB from repeated dead-code lookups.
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 📡 API reference
+
+**Local API base:** `http://localhost:3001`
+**Frontend proxy base:** `http://localhost:3000/backend` (e.g. `/backend/api/url_shortener` → `/api/url_shortener`)
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/url_shortener` | Create a short URL |
-| `GET` | `/api/:code/stats` | Get visit statistics for a code |
-| `GET` | `/:code` | 302 redirect to the original URL |
+| `POST` | `/api/url_shortener` | Create a short link |
+| `GET` | `/api/:code/stats` | Retrieve a link's statistics |
+| `GET` | `/:code` | Redirect to the original URL |
+| `GET` | `/health` | Liveness probe *(see note below)* |
 
-All error responses share the same shape:
+> **🧪 Tip:** an OpenAPI spec under `docs/openapi.yaml` (served at `/docs` via `swagger-ui-express`) is recommended before exposing the API publicly. Until then, this section is the source of truth.
+
+All documented errors share one shape:
 
 ```json
-{ "message": "Human readable error description." }
+{ "message": "Human-readable error description." }
 ```
 
-### `POST /api/url_shortener`
+### Create a short link
 
-Create a short URL from a long one.
-
-**Request body**
+`POST /api/url_shortener`
 
 | Field | Type | Required | Constraints |
-|---|---|---|---|
-| `longURL` | string | yes | absolute `http(s)` URL, ≤ 2048 chars |
+|---|---|---:|---|
+| `longURL` | string | Yes | Absolute `http` / `https` URL; ≤ 2,048 chars |
 
 ```bash
 curl -X POST http://localhost:3001/api/url_shortener \
   -H "Content-Type: application/json" \
-  -d '{"longURL":"https://www.example.com/some/very/long/path?with=parameters"}'
+  -d '{"longURL":"https://www.example.com/articles/a-long-page"}'
 ```
 
 **`201 Created`**
@@ -354,8 +319,8 @@ curl -X POST http://localhost:3001/api/url_shortener \
 ```json
 {
   "message": "URL shortened successfully",
-  "data": {
-    "longURL": "https://www.example.com/some/very/long/path?with=parameters",
+  "url": {
+    "longURL": "https://www.example.com/articles/a-long-page",
     "shortURL": "aB3xK9",
     "shortLink": "http://localhost:3001/aB3xK9",
     "totalVisits": 0
@@ -369,9 +334,9 @@ curl -X POST http://localhost:3001/api/url_shortener \
 { "message": "Invalid URL. Please provide a valid http(s) URL." }
 ```
 
-### `GET /api/:code/stats`
+### Retrieve link statistics
 
-Visit statistics for a short code. Always read fresh from MongoDB for accuracy (bypasses the redirect cache by design).
+`GET /api/:code/stats`
 
 ```bash
 curl http://localhost:3001/api/aB3xK9/stats
@@ -382,9 +347,9 @@ curl http://localhost:3001/api/aB3xK9/stats
 ```json
 {
   "message": "Stats retrieved successfully",
-  "data": {
+  "url": {
     "shortURL": "aB3xK9",
-    "longURL": "https://www.example.com/some/very/long/path?with=parameters",
+    "longURL": "https://www.example.com/articles/a-long-page",
     "totalVisits": 42,
     "lastVisitedAt": "2026-10-08T20:59:41.000Z",
     "createdAt": "2026-10-08T21:10:00.000Z"
@@ -392,7 +357,7 @@ curl http://localhost:3001/api/aB3xK9/stats
 }
 ```
 
-**`400 Bad Request`** (malformed code)
+**`400 Bad Request`** — malformed code
 
 ```json
 { "message": "Invalid code format." }
@@ -404,22 +369,25 @@ curl http://localhost:3001/api/aB3xK9/stats
 { "message": "Short URL not found" }
 ```
 
-### `GET /:code`
+> **⚠️ Eventual consistency:** visit totals may briefly lag while the worker processes queued updates.
 
-Resolve a short code to its original URL.
+### Redirect to the original URL
+
+`GET /:code`
 
 ```bash
 curl -i http://localhost:3001/aB3xK9
 ```
 
-**`302 Found`** — the `Location` header points to the original URL:
+**`302 Found`**
 
-```
+```http
 HTTP/1.1 302 Found
-Location: https://www.example.com/some/very/long/path?with=parameters
+Location: https://www.example.com/articles/a-long-page
+Cache-Control: no-store
 ```
 
-**`404 Not Found`** (unknown code):
+**`404 Not Found`** — unknown code
 
 ```json
 { "message": "Short URL not found" }
@@ -427,117 +395,354 @@ Location: https://www.example.com/some/very/long/path?with=parameters
 
 ### Status codes
 
-| Code | Meaning |
-|---|---|
-| `201` | Short URL created |
-| `302` | Found — redirected to the original URL |
-| `400` | Malformed request (missing/invalid `longURL`, invalid code format) |
+| Status | Meaning |
+|---:|---|
+| `201` | Short link created |
+| `302` | Redirect to the original URL |
+| `400` | Invalid body or malformed code |
 | `404` | Short code does not exist |
+| `409` | Duplicate short code (retried server-side) |
+| `429` | Rate limited *(recommended addition)* |
 | `500` | Unexpected server error |
 
-## Data Model
+> **🩺 `/health` (recommended):** add `GET /health` returning `{ "status": "ok" }` so hosting platforms can run liveness checks. Not implemented yet — small, high-value addition.
 
-Mongoose schema (`backend/src/models/url_models.js`):
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
 
-| Field | Type | Constraints |
+---
+
+## 🔧 Engineering notes
+
+<details>
+<summary><strong>Short-code generation &amp; data model</strong></summary>
+
+| Field | Type | Constraints / purpose |
 |---|---|---|
-| `longURL` | String | required, trimmed, max 2048 chars |
-| `shortURL` | String | required, **unique**, indexed, 6–10 alphanumeric chars |
-| `totalVisits` | Number | default `0` |
-| `lastVisitedAt` | Date | nullable (never visited yet) |
-| `createdAt` / `updatedAt` | Date | managed by `timestamps: true` |
+| `longURL` | String | Required, trimmed, ≤ 2,048 chars |
+| `shortURL` | String | Required, unique, indexed; six-character code |
+| `totalVisits` | Number | Defaults to `0` |
+| `lastVisitedAt` | Date | `null` until a visit is recorded |
+| `createdAt` / `updatedAt` | Date | Mongoose `timestamps: true` |
 
-Short codes are generated with `nanoid.customAlphabet("A-Za-z0-9", 6)`. If an insert collides with an existing code (extremely rare at 36⁶ space), the service regenerates the code and retries.
+`customAlphabet` treats its argument as a literal character set — it does **not** expand ranges like `A-Z`. Pass the full alphabet explicitly:
 
-## Caching Strategy
+```js
+import { customAlphabet } from "nanoid";
 
-Redis sits in front of MongoDB for the **redirect path only**; all keys live under the `KEY_PREFIX` namespace.
+const alphabet =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"; // 62 chars
+const generateCode = customAlphabet(alphabet, 6);
+```
 
-| Key pattern | Type | Purpose |
+62⁶ = **56,800,235,584** possible six-character codes. The database `unique` index remains the final guard; creation retries on a duplicate-key conflict.
+
+</details>
+
+<details>
+<summary><strong>Redis caching &amp; visit processing</strong></summary>
+
+Redis accelerates URL resolution. MongoDB remains the persistent store.
+
+| Key pattern | Value | Purpose |
 |---|---|---|
-| `{KEY_PREFIX}:url:{code}` | hash | Cached URL record (long URL, visit fields) for fast 302s |
-| `{KEY_PREFIX}` not-found marker per code | string + TTL | Briefly caches "code does not exist" so dead codes don't repeatedly hit MongoDB |
+| `{KEY_PREFIX}:url:{code}` | Cached URL record (hash) | Resolve repeat redirects without a MongoDB read |
+| `{KEY_PREFIX}:notfound:{code}` | Short-lived marker (string + TTL) | Stop repeated lookups for unknown codes |
 
-See `src/services/url_cache_service.js` for exact key construction and TTL values.
+Exact key names and TTLs live in `src/services/url_cache_service.js`.
 
-Design rules:
+**Request behavior:**
 
-- **Cache-first resolution** — `resolve` checks Redis before touching MongoDB; a hit redirects immediately.
-- **Counters never block redirects** — on cached redirects, visits are incremented via `touchVisits`, a fire-and-forget update. A Redis hiccup must never delay the 302.
-- **Stats are always fresh** — the stats endpoint reads MongoDB directly, so analytics are accurate even while the redirect cache is warm.
-- **Negative caching** — unknown codes are cached with a short TTL to absorb repeated lookups of mistyped or expired codes.
+1. Redirect checks Redis.
+2. On miss, API queries MongoDB and caches the record.
+3. API emits `302` immediately.
+4. A BullMQ `update-visit-count` job is enqueued.
+5. The worker `$inc`s `totalVisits` and sets `lastVisitedAt`.
 
-## Error Handling
+Because step 5 is async, statistics can be briefly stale. The worker must be running.
 
-Errors flow through a single central handler (`src/middleware/error_handler.js`):
+</details>
 
-| Source | Normalized as |
+<details>
+<summary><strong>Validation &amp; error handling</strong></summary>
+
+Frontend (`lib/validators.ts`) and backend (`utils/validators.js`) share rules: accept absolute `http` / `https` URLs, reject malformed codes.
+
+| Error source | HTTP response |
 |---|---|
-| `AppError` (thrown by controllers/services) | its own `statusCode` + message |
-| MongoDB duplicate key (code `11000`) | clean JSON response for the conflicting field (e.g. `shortURL`) |
-| Mongoose `CastError` (bad ObjectId, etc.) | `400` with a readable message |
-| Mongoose `ValidationError` | `400` with the first validation message |
-| Anything else | `500` — detailed stack in dev, generic message in production |
+| `AppError` | Its own status code + message |
+| MongoDB duplicate key (`11000`) | `409 Conflict` |
+| Mongoose `CastError` | `400` with a readable message |
+| Mongoose `ValidationError` | `400` with a validation message |
+| Unhandled error | `500`; stack only in development |
 
-`AppError` (`src/utils/errors.js`) extends `Error` and carries a `statusCode`, letting services throw `throw new AppError(404, "Short URL not found")` instead of repeating response logic.
+```js
+throw new AppError("Short URL not found", 404);
+```
 
-## Available Scripts
+Constructor order is `(message, statusCode)`.
 
-### `backend/package.json`
+> **🛡 SSRF note:** URL *syntax* validation alone doesn't prevent SSRF. Before public release, consider blocking `localhost`, private ranges (`10/8`, `172.16/12`, `192.168/16`), and link-local (`169.254/16`) destinations.
 
-| Script | Command | Description |
+</details>
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 📁 Project structure
+
+<details>
+<summary>Show main folders &amp; responsibilities</summary>
+
+```text
+url-shortener-api/
+├── backend/
+│   ├── server.js                 # API entry point
+│   ├── worker.js                 # visit-counting worker
+│   ├── .env.example
+│   ├── src/
+│   │   ├── app.js                # Express app setup
+│   │   ├── config/               # MongoDB, Redis, BullMQ connections
+│   │   ├── controllers/          # Request validation & response shaping
+│   │   ├── middleware/           # Central error handling
+│   │   ├── models/               # Mongoose URL model
+│   │   ├── routes/               # API & redirect routes
+│   │   ├── services/             # URL creation, lookup, cache, visit logic
+│   │   └── utils/                # Validators & application errors
+│   └── tests/
+│       ├── unit/
+│       └── integration/
+├── frontend/
+│   ├── next.config.ts            # Next.js rewrites
+│   ├── .env.local.example
+│   └── src/
+│       ├── app/                  # Home, shorten, stats pages
+│       ├── components/           # Forms, statistics, UI
+│       └── lib/                  # API client, validators, formatting
+├── docker-compose.yml            # Mongo + Redis for local dev
+└── PRD.md                        # V1 product specification
+```
+
+**Backend flow:** Routes → Controllers → Services → Models / integrations.
+**Frontend:** Next.js App Router, TypeScript, Tailwind CSS, reusable components.
+
+</details>
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 🧪 Scripts and testing
+
+### Backend
+
+| Command | Purpose |
+|---|---|
+| `npm start` | Production API (`node server.js`) |
+| `npm run dev` | API with auto-restart |
+| `npm run worker` | BullMQ visit worker |
+| `npm run worker:dev` | Worker with auto-restart |
+
+### Frontend
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Next.js dev server |
+| `npm run build` | Production build |
+| `npm start` | Serve production build |
+| `npm run lint` | Lint |
+
+### Testing status
+
+`backend/tests/unit` and `backend/tests/integration` are scaffolded. **No test framework is configured yet** — this README makes no coverage claims until one is wired up and CI runs.
+
+**Suggested first specs:**
+
+- `isValidUrl` / `isValidCode` edge cases (scheme, length, characters, casing)
+- Code generation & collision-retry behavior
+- Full `POST → GET /:code → GET /stats` round-trip
+- Cache hit / miss / negative-cache paths
+- BullMQ job success, retry, and failure behavior
+
+When a runner is added, replace this section with the real command (e.g. `npm test`) and re-enable the CI + coverage badges at the top.
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 🚢 Deployment and security
+
+The local setup targets development. Before exposing publicly:
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+- Set `NEXT_PUBLIC_API_URL` to the public API origin and rebuild the frontend.
+- Configure **production CORS** to allow only trusted frontend origins. The dev rewrite avoids cross-origin calls locally; it does **not** remove the need for CORS in production.
+- Use **HTTPS** for all public traffic, and TLS for MongoDB / Redis where supported.
+- Store credentials in your host's secret manager — never commit `.env`.
+- Rename `Mongo_URI` → `MONGO_URI` if you prefer convention (update code together).
+
+</details>
+
+<details>
+<summary><strong>Process &amp; infrastructure</strong></summary>
+
+- Run the **worker separately** from the API and supervise both (`pm2`, `systemd`, or your platform's process manager).
+- Configure **Redis auth** (`requirepass` / TLS) and sensible retry strategy on the client.
+- Enable **Redis persistence** (`appendonly yes`) if visit counts must survive restarts.
+- Confirm your hosting provider supports **background workers** (some PaaS plans don't).
+
+</details>
+
+<details>
+<summary><strong>Hardening checklist</strong></summary>
+
+- [ ] `helmet` — security headers
+- [ ] `express-rate-limit` — protect `POST /api/url_shortener`
+- [ ] `compression` — response gzip
+- [ ] Request logging (`pino` / `morgan`)
+- [ ] **Graceful shutdown** — close Mongo, Redis, and BullMQ on `SIGTERM`
+- [ ] SSRF guard — block private/link-local destinations
+- [ ] `/health` endpoint
+- [ ] BullMQ **retry / backoff / DLQ** for failed visit jobs
+- [ ] HTTPS-only cookies / headers if auth is added later
+
+</details>
+
+> **⚠️ Abuse surface:** short links can redirect users to arbitrary destinations. Syntax validation alone doesn't guarantee a destination is safe to visit — plan for reporting / takedown flows if this service is public.
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 🩺 Troubleshooting
+
+| Symptom | Likely cause | What to check |
 |---|---|---|
-| `npm start` | `node server.js` | Start the production server |
-| `npm run dev` | `nodemon server.js` | Start with auto-restart |
+| MongoDB connection refused | Mongo stopped / bad `Mongo_URI` / Atlas IP not whitelisted | Start Mongo; verify URI; add your IP in Atlas Network Access. |
+| Redis connection refused on `6379` | Redis stopped / wrong host or port | Start Redis; check `REDIS_HOST`, `REDIS_PORT`. |
+| `EADDRINUSE :::3001` | Port already in use | Stop the other process or change `PORT` — then update `BACKEND_URL` and `NEXT_PUBLIC_API_URL`. The **worker** doesn't bind the API port. |
+| Frontend can't reach the API | Rewrite target or path wrong | Verify `BACKEND_URL` and `/backend/*` rewrite; `/backend/api/url_shortener` → `http://localhost:3001/api/url_shortener`. |
+| Short link 404s | Typo / case mismatch / unknown code / fresh negative cache | Codes are **case-sensitive**; wait for the negative-cache TTL if very recent. |
+| Visit total doesn't change | Worker not running / job pending | Start `npm run worker`; allow a moment for async updates. |
+| Deployed short link points at `localhost` | Public URL not set | Set `NEXT_PUBLIC_API_URL` to the deployed API origin and rebuild. |
+| `401` / CORS errors in browser after deploy | CORS not configured | Allow the exact frontend origin in the API's CORS config. |
 
-### `frontend/package.json`
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
 
-| Script | Command | Description |
-|---|---|---|
-| `npm run dev` | `next dev` | Dev server on `:3000` (with `/backend` proxy) |
-| `npm run build` | `next build` | Production build |
-| `npm start` | `next start` | Serve the production build |
-| `npm run lint` | `eslint` | Lint the frontend |
+---
 
-## Testing
+## ❓ FAQ and glossary
 
-`backend/tests/unit` and `backend/tests/integration` are scaffolded and ready for specs. Suggested first targets:
+<details>
+<summary><strong>Can I choose a custom short code?</strong></summary>
 
-- **Unit** — `isValidUrl` / `isValidCode` edge cases; code-generation uniqueness; collision-retry logic
-- **Integration** — full `POST /api/url_shortener` → `GET /:code` → `GET .../stats` round-trip; not-found caching behavior; duplicate-key handling
+Not yet. Custom aliases are on the [roadmap](#️-roadmap).
 
-## Troubleshooting
+</details>
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `MongooseServerSelectionError: connect ECONNREFUSED` | MongoDB not running, wrong `Mongo_URI`, or Atlas IP not whitelisted | Start Mongo locally, verify the connection string, and add your IP to the Atlas Network Access list |
-| Redis `ECONNREFUSED` on `:6379` | Redis not running | `docker run -d -p 6379:6379 redis:7-alpine` or install Redis locally |
-| `EADDRINUSE :::3001` | Another process owns the port | Change `PORT` and update `BACKEND_URL` / `NEXT_PUBLIC_API_URL` in the frontend to match |
-| Frontend can't reach the API in dev | Rewrite misconfigured | Check `BACKEND_URL` and the `/backend/*` rewrite in `next.config.ts`; browser calls go through the proxy, never straight to `:3001` |
-| Short link 404s in the browser | Case mismatch, typo, or negative cache | Codes are 6 chars and **case-sensitive**. If the code was created moments ago, wait out the short not-found TTL |
-| Stats show 0 visits after many clicks | Visits still flushing | Counter updates are async (fire-and-forget) — stats settle within a second |
-| Generated short links say `localhost` after deploy | `NEXT_PUBLIC_API_URL` unchanged | Point it at the deployed API's public origin and rebuild |
+<details>
+<summary><strong>Do links expire?</strong></summary>
 
-## Roadmap
+Not in V1. Expiry + auto-deletion are on the [roadmap](#️-roadmap).
 
-V1 is specified in [`PRD.md`](./PRD.md). Planned next (the BullMQ queue + worker in `src/config/bullMQ.js` is already wired and waiting):
+</details>
 
-- [ ] Custom short codes / branded aliases
-- [ ] Link expiry and auto-deletion (async via the queue)
-- [ ] Per-day and per-country analytics (queued processing)
-- [ ] QR code generation for short links
-- [ ] Click export (CSV)
+<details>
+<summary><strong>Are visits deduplicated?</strong></summary>
 
-## Contributing
+No — each redirect increments the count, including your own tests.
 
-Contributions are welcome. The general flow:
+</details>
 
-1. Fork the repo and create a branch (`feat/...` or `fix/...`)
-2. Keep backend changes inside the existing **Routes → Controllers → Services** layers
-3. Keep frontend validation rules mirrored with the backend (`validators.ts` ↔ `validators.js`)
-4. Run the app locally end-to-end before opening a PR
-5. Open a pull request with a short description and, where relevant, a screenshot
+<details>
+<summary><strong>What analytics are collected?</strong></summary>
 
-## License
+Only `totalVisits` and `lastVisitedAt`. Per-day, country, referrer, and user-agent analytics are not part of V1.
 
-[MIT](./LICENSE) — free to use, modify, and distribute.
+</details>
+
+<details>
+<summary><strong>Is there authentication?</strong></summary>
+
+No — the V1 API is public and unauthenticated. Add rate limiting **before** exposing it publicly.
+
+</details>
+
+### Glossary
+
+| Term | Meaning |
+|---|---|
+| **Cache hit** | Redis already holds the URL record for the requested code. |
+| **Cache miss** | No Redis record → API falls back to MongoDB. |
+| **Negative caching** | Brief caching of a not-found result to avoid repeated DB lookups. |
+| **Asynchronous visit update** | Redirect returns without waiting for the visit write to persist. |
+| **Eventual consistency** | Statistics become accurate shortly after the redirect, not within the same request. |
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 🗺️ Roadmap
+
+Prioritized follow-up work:
+
+- [ ] **P0** — Automated unit + integration tests and CI workflow
+- [ ] **P0** — `/health` endpoint + graceful shutdown
+- [ ] **P0** — Rate limiting on `POST /api/url_shortener`
+- [ ] **P1** — OpenAPI spec served at `/docs`
+- [ ] **P1** — Custom short codes / branded aliases
+- [ ] **P1** — BullMQ retry / backoff / DLQ docs
+- [ ] **P2** — Link expiry and automatic deletion
+- [ ] **P2** — Per-day and per-country analytics
+- [ ] **P2** — QR-code generation
+- [ ] **P3** — Click-data export (CSV)
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome. Workflow:
+
+1. Open or check an issue describing the change.
+2. Branch: `feat/custom-alias`, `fix/redirect-cache`, `docs/env-examples`, …
+3. Keep API changes inside the existing **Routes → Controllers → Services** layers.
+4. Keep frontend and backend validation rules aligned.
+5. Run the relevant **lint / build / tests** locally, and smoke-test the full create → redirect → stats flow.
+6. Open a PR with a concise summary, test notes, and screenshots for UI changes.
+
+**Commit convention:** [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
+
+**Don't commit:** `.env`, credentials, `node_modules`, `.next`, `dist`.
+
+**Security disclosures:** please report vulnerabilities privately — see `SECURITY.md` *(to be added; until then open a minimal issue without reproduction steps and request a private channel)*.
+
+**Community guidelines:** `CODE_OF_CONDUCT.md` *(to be added — Contributor Covenant recommended)*.
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 🙏 Acknowledgements
+
+- [NanoID](https://github.com/ai/nanoid) — short code generation
+- [BullMQ](https://docs.bullmq.io/) — background jobs
+- [shadcn/ui](https://ui.shadcn.com/) — component primitives
+- [Lucide](https://lucide.dev/) — icons
+- [Mermaid](https://mermaid.js.org/) — architecture diagrams
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+---
+
+## 📄 License
+
+Licensed under the **MIT License** — see [`LICENSE`](./LICENSE).
+
+<p align="right"><a href="#-contents">↥ Back to top</a></p>
+
+
+---
