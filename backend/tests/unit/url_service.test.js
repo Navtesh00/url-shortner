@@ -23,7 +23,6 @@ jest.mock("../../src/utils/errors.js", () => ({
 }));
 
 import Url from "../../src/models/url_models.js";
-import generateShortCode from "../../src/services/generate_code.js";
 import {
     getCachedUrl,
     getCachedNotFoundUrl,
@@ -33,24 +32,34 @@ import {
 import { isValidCode } from "../../src/utils/validators.js";
 import { AppError } from "../../src/utils/errors.js";
 import { createShortUrl, resolveLongUrl, getUrlStats } from "../../src/services/url_service.js";
+import {
+    VALID_CODE,
+    makeUrlDoc,
+    makeCachedUrlDoc,
+    mockCodeValid,
+    mockNotInNegativeCache,
+    mockNegativeCacheHit,
+    mockUrlCacheMiss,
+    mockUrlCacheHit,
+} from "./helpers/urlServiceTestUtils.js";
 
 describe("createShortUrl", () => {
     beforeEach(() => jest.clearAllMocks());
 
     it("creates and returns a URL document", async () => {
-        const doc = { _id: "id1", longURL: "https://example.com", shortURL: "AAAAAA", totalVisits: 0 };
+        const doc = makeUrlDoc();
         Url.create.mockResolvedValue(doc);
 
         const result = await createShortUrl("https://example.com");
 
-        expect(Url.create).toHaveBeenCalledWith({ longURL: "https://example.com", shortURL: "AAAAAA" });
+        expect(Url.create).toHaveBeenCalledWith({ longURL: "https://example.com", shortURL: VALID_CODE });
         expect(result).toBe(doc);
     });
 
     it("retries once on duplicate key 11000", async () => {
         const dupError = new Error("dup");
         dupError.code = 11000;
-        const doc = { _id: "id1", shortURL: "AAAAAA" };
+        const doc = { _id: "id1", shortURL: VALID_CODE };
         Url.create.mockRejectedValueOnce(dupError).mockResolvedValue(doc);
 
         const result = await createShortUrl("https://example.com");
@@ -81,60 +90,117 @@ describe("resolveLongUrl", () => {
     beforeEach(() => jest.clearAllMocks());
 
     it("rejects an invalid code", async () => {
-        isValidCode.mockReturnValue(false);
+        mockCodeValid(isValidCode, false);
         await expect(resolveLongUrl("bad")).rejects.toMatchObject({
             message: "Please provide a valid code",
             statusCode: 400,
         });
     });
 
-    it("returns the cached record when it has an _id", async () => {
-        isValidCode.mockReturnValue(true);
-        getCachedNotFoundUrl.mockResolvedValue(false);
-        getCachedUrl.mockResolvedValue({ _id: "id1", longURL: "https://example.com" });
+    it("returns cached record without calling Mongo when cache has _id", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        const cached = makeCachedUrlDoc();
+        mockUrlCacheHit(getCachedUrl, cached);
 
-        const result = await resolveLongUrl("AAAAAA");
+        const result = await resolveLongUrl(VALID_CODE);
 
-        expect(result).toEqual({ _id: "id1", longURL: "https://example.com" });
+        expect(result).toEqual(cached);
         expect(Url.findOne).not.toHaveBeenCalled();
     });
 
-    it("falls back to MongoDB on cache miss and caches the record", async () => {
-        isValidCode.mockReturnValue(true);
-        getCachedNotFoundUrl.mockResolvedValue(false);
-        getCachedUrl.mockResolvedValue(null);
-        const doc = { _id: "id1", longURL: "https://example.com", shortURL: "AAAAAA", totalVisits: 0 };
+    it("falls through to Mongo when cached record has no _id", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        mockUrlCacheHit(getCachedUrl, { longURL: "https://no-id.com" });
+
+        const doc = makeUrlDoc();
         Url.findOne.mockResolvedValue(doc);
 
-        const result = await resolveLongUrl("AAAAAA");
+        const result = await resolveLongUrl(VALID_CODE);
 
-        expect(Url.findOne).toHaveBeenCalledWith({ shortURL: "AAAAAA" });
-        expect(setCacheUrl).toHaveBeenCalledWith("AAAAAA", doc);
+        expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
         expect(result).toBe(doc);
     });
 
-    it("throws 404 and caches negative when the URL is missing", async () => {
-        isValidCode.mockReturnValue(true);
-        getCachedNotFoundUrl.mockResolvedValue(false);
-        getCachedUrl.mockResolvedValue(null);
+    it("falls back to MongoDB on cache miss and caches the record", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        mockUrlCacheMiss(getCachedUrl);
+        const doc = makeUrlDoc();
+        Url.findOne.mockResolvedValue(doc);
+
+        const result = await resolveLongUrl(VALID_CODE);
+
+        expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
+        expect(setCacheUrl).toHaveBeenCalledWith(VALID_CODE, doc);
+        expect(result).toBe(doc);
+    });
+
+    it("calls setCacheNotFoundUrl before throwing when Mongo returns null", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        mockUrlCacheMiss(getCachedUrl);
         Url.findOne.mockResolvedValue(null);
 
-        await expect(resolveLongUrl("AAAAAA")).rejects.toMatchObject({
+        await expect(resolveLongUrl(VALID_CODE)).rejects.toMatchObject({
             message: "UR not found",
             statusCode: 404,
         });
-        expect(setCacheNotFoundUrl).toHaveBeenCalledWith("AAAAAA");
+        expect(setCacheNotFoundUrl).toHaveBeenCalledWith(VALID_CODE);
     });
 
     it("returns 404 when negative cache already holds the code", async () => {
-        isValidCode.mockReturnValue(true);
-        getCachedNotFoundUrl.mockResolvedValue(true);
+        mockCodeValid(isValidCode);
+        mockNegativeCacheHit(getCachedNotFoundUrl);
 
-        await expect(resolveLongUrl("AAAAAA")).rejects.toMatchObject({
+        await expect(resolveLongUrl(VALID_CODE)).rejects.toMatchObject({
             message: "Not found URL",
             statusCode: 404,
         });
         expect(Url.findOne).not.toHaveBeenCalled();
+    });
+
+    it("propagates Redis errors from getCachedNotFoundUrl", async () => {
+        mockCodeValid(isValidCode);
+        getCachedNotFoundUrl.mockRejectedValue(new Error("redis connection failed"));
+
+        await expect(resolveLongUrl(VALID_CODE)).rejects.toThrow("redis connection failed");
+    });
+
+    it("does not catch getCachedNotFoundUrl errors — known 500 risk", async () => {
+        mockCodeValid(isValidCode);
+        getCachedNotFoundUrl.mockRejectedValue(new Error("redis down"));
+
+        await expect(resolveLongUrl(VALID_CODE)).rejects.toThrow("redis down");
+    });
+
+    it("falls back to MongoDB when getCachedUrl throws", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        getCachedUrl.mockRejectedValue(new Error("redis get failed"));
+
+        const doc = makeUrlDoc();
+        Url.findOne.mockResolvedValue(doc);
+
+        const result = await resolveLongUrl(VALID_CODE);
+
+        expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
+        expect(result).toBe(doc);
+    });
+
+    it("returns the Mongo record even when setCacheUrl throws", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        mockUrlCacheMiss(getCachedUrl);
+        setCacheUrl.mockRejectedValue(new Error("redis set failed"));
+
+        const doc = makeUrlDoc();
+        Url.findOne.mockResolvedValue(doc);
+
+        const result = await resolveLongUrl(VALID_CODE);
+
+        expect(result).toBe(doc);
     });
 });
 
@@ -142,30 +208,30 @@ describe("getUrlStats", () => {
     beforeEach(() => jest.clearAllMocks());
 
     it("rejects an invalid code", async () => {
-        isValidCode.mockReturnValue(false);
+        mockCodeValid(isValidCode, false);
         await expect(getUrlStats("bad")).rejects.toMatchObject({
             message: "Please provide a valid code",
             statusCode: 400,
         });
     });
 
-    it("throws 404 and caches negative when the URL is missing", async () => {
-        isValidCode.mockReturnValue(true);
-        getCachedNotFoundUrl.mockResolvedValue(false);
+    it("calls setCacheNotFoundUrl before throwing when Mongo returns null", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
         Url.findOne.mockResolvedValue(null);
 
-        await expect(getUrlStats("AAAAAA")).rejects.toMatchObject({
+        await expect(getUrlStats(VALID_CODE)).rejects.toMatchObject({
             message: "URL not found",
             statusCode: 404,
         });
-        expect(setCacheNotFoundUrl).toHaveBeenCalledWith("AAAAAA");
+        expect(setCacheNotFoundUrl).toHaveBeenCalledWith(VALID_CODE);
     });
 
     it("returns 404 when negative cache already holds the code", async () => {
-        isValidCode.mockReturnValue(true);
-        getCachedNotFoundUrl.mockResolvedValue(true);
+        mockCodeValid(isValidCode);
+        mockNegativeCacheHit(getCachedNotFoundUrl);
 
-        await expect(getUrlStats("AAAAAA")).rejects.toMatchObject({
+        await expect(getUrlStats(VALID_CODE)).rejects.toMatchObject({
             message: "URL not found",
             statusCode: 404,
         });
@@ -173,15 +239,35 @@ describe("getUrlStats", () => {
     });
 
     it("reads from MongoDB and caches the record on success", async () => {
-        isValidCode.mockReturnValue(true);
-        getCachedNotFoundUrl.mockResolvedValue(false);
-        const doc = { _id: "id1", longURL: "https://example.com", shortURL: "AAAAAA", totalVisits: 5 };
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        const doc = makeUrlDoc({ totalVisits: 5 });
         Url.findOne.mockResolvedValue(doc);
 
-        const result = await getUrlStats("AAAAAA");
+        const result = await getUrlStats(VALID_CODE);
 
-        expect(Url.findOne).toHaveBeenCalledWith({ shortURL: "AAAAAA" });
-        expect(setCacheUrl).toHaveBeenCalledWith("AAAAAA", doc);
+        expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
+        expect(setCacheUrl).toHaveBeenCalledWith(VALID_CODE, doc);
+        expect(result).toBe(doc);
+    });
+
+    it("propagates Redis errors from getCachedNotFoundUrl", async () => {
+        mockCodeValid(isValidCode);
+        getCachedNotFoundUrl.mockRejectedValue(new Error("redis stats failed"));
+
+        await expect(getUrlStats(VALID_CODE)).rejects.toThrow("redis stats failed");
+    });
+
+    it("returns the Mongo record even when setCacheUrl throws", async () => {
+        mockCodeValid(isValidCode);
+        mockNotInNegativeCache(getCachedNotFoundUrl);
+        setCacheUrl.mockRejectedValue(new Error("redis stats set failed"));
+
+        const doc = makeUrlDoc({ totalVisits: 5 });
+        Url.findOne.mockResolvedValue(doc);
+
+        const result = await getUrlStats(VALID_CODE);
+
         expect(result).toBe(doc);
     });
 });
