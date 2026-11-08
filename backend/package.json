@@ -28,7 +28,21 @@
     "transform": {
       "^.+\\.[m]?js$": "babel-jest"
     },
-    "transformIgnorePatterns": ["<rootDir>/node_modules/"]
+    "transformIgnorePatterns": ["<rootDir>/node_modules/(?!nanoid)"],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/config/db.js",
+      "!src/config/bullMQ.js",
+      "!src/workers/**/*.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 70,
+        "statements": 70
+      }
+    }
   },
   "dependencies": {
     "bullmq": "^6.3.11",
