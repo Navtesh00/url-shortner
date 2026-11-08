@@ -131,7 +131,10 @@ services:
 volumes:
   mongo-data:
   redis-data:
+<<<<<<< HEAD
 ```
+=======
+>>>>>>> origin/main
 
 Then:
 
@@ -202,11 +205,19 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 Open [http://localhost:3000](http://localhost:3000).
 
 > **🔁 Proxy mapping:** a frontend request to `/backend/api/url_shortener` is rewritten to `http://localhost:3001/api/url_shortener`. Direct API examples later in this README use the backend origin (`:3001`).
+<<<<<<< HEAD
 
 ### 4. Smoke-test the API
 
 ```bash
 # create -> note the returned url.shortURL (e.g. aB3xK9)
+=======
+
+### 4. Smoke-test the API
+
+```bash
+# create
+>>>>>>> origin/main
 curl -X POST http://localhost:3001/api/url_shortener \
   -H "Content-Type: application/json" \
   -d '{"longURL":"https://www.example.com/articles/a-long-page"}'
@@ -214,8 +225,13 @@ curl -X POST http://localhost:3001/api/url_shortener \
 # stats (replace <code> with the shortURL returned above)
 curl http://localhost:3001/api/<code>/stats
 
+<<<<<<< HEAD
 # redirect (replace <code> with the shortURL returned above)
 curl -i http://localhost:3001/<code>
+=======
+# redirect
+curl -i http://localhost:3001/aB3xK9
+>>>>>>> origin/main
 ```
 
 <details>
