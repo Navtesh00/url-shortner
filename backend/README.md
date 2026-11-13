@@ -78,6 +78,8 @@ npm start
 - This is **Version 1 (MVP)** focused on core functionality.
 - Future versions will include Redis caching, user authentication, and analytics improvements.
 
+The dirty set is iterated with `SSCAN` and members are removed only after their `$inc` succeeds; `SPOP` is avoided because it discards the code before the drain has a chance to fail safely. A crash mid-drain therefore leaves the code in `dirty` with the count preserved in `flush:{code}:{jobId}`, and the retry resolves to a no-such-key `SREM` rather than a double count.
+
 ## 📄 License
 
 This project is open source and available under the [MIT License](LICENSE).

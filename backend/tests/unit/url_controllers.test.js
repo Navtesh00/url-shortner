@@ -3,8 +3,8 @@ jest.mock("../../src/services/url_service.js", () => ({
     resolveLongUrl: jest.fn(),
     getUrlStats: jest.fn(),
 }));
-jest.mock("../../src/jobs/visit_job_producer.js", () => ({
-    enqueueVisitJob: jest.fn().mockResolvedValue(undefined),
+jest.mock("../../src/jobs/flush_job_producer.js", () => ({
+    produceFlushJob: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock("../../src/utils/validators.js", () => ({
     isValidUrl: jest.fn(() => true),
@@ -12,7 +12,7 @@ jest.mock("../../src/utils/validators.js", () => ({
 
 import { shortenUrl, redirectToLongUrl, fetchUrlStats } from "../../src/controllers/url_controllers.js";
 import { createShortUrl, resolveLongUrl, getUrlStats } from "../../src/services/url_service.js";
-import { enqueueVisitJob } from "../../src/jobs/visit_job_producer.js";
+import { produceFlushJob } from "../../src/jobs/flush_job_producer.js";
 import { isValidUrl } from "../../src/utils/validators.js";
 import { AppError } from "../../src/utils/errors.js";
 
@@ -79,27 +79,21 @@ describe("url_controllers", () => {
     });
 
     describe("redirectToLongUrl", () => {
-        it("enqueues a visit job and returns 302 redirect", async () => {
-            const url = { _id: "id1", longURL: "https://example.com" };
-            resolveLongUrl.mockResolvedValue(url);
+        it("produces a flush job and returns 302 redirect", async () => {
+            resolveLongUrl.mockResolvedValue("https://example.com");
             const req = { params: { code: "AAAAAA" } };
             const res = mockRes();
 
             await redirectToLongUrl(req, res);
 
             expect(resolveLongUrl).toHaveBeenCalledWith("AAAAAA");
-            expect(enqueueVisitJob).toHaveBeenCalledWith({
-                urlId: "id1",
-                shortCode: "AAAAAA",
-                visitedAt: expect.any(Date),
-            });
+            expect(produceFlushJob).toHaveBeenCalledWith("AAAAAA");
             expect(res.redirect).toHaveBeenCalledWith(302, "https://example.com");
         });
 
-        it("swallows visit job enqueue errors (fire-and-forget)", async () => {
-            const url = { _id: "id1", longURL: "https://example.com" };
-            resolveLongUrl.mockResolvedValue(url);
-            enqueueVisitJob.mockRejectedValue(new Error("redis down"));
+        it("swallows flush job enqueue errors (fire-and-forget)", async () => {
+            resolveLongUrl.mockResolvedValue("https://example.com");
+            produceFlushJob.mockRejectedValue(new Error("redis down"));
             const req = { params: { code: "AAAAAA" } };
             const res = mockRes();
 
@@ -117,7 +111,7 @@ describe("url_controllers", () => {
                 message: "Please provide a valid code",
                 statusCode: 400,
             });
-            expect(enqueueVisitJob).not.toHaveBeenCalled();
+            expect(produceFlushJob).not.toHaveBeenCalled();
         });
 
         it("throws 404 when URL is not found", async () => {

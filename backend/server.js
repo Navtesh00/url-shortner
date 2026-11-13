@@ -1,10 +1,12 @@
 import dotenv from "dotenv";
 import databaseConnection from "./src/config/db.js";
 import app from "./src/app.js"
+import { validateRedisConfig } from "./src/config/redis.js";
 
 dotenv.config({path: "./.env"});
 
 try{
+    await validateRedisConfig();
     await databaseConnection();
     app.on("error", (error) => {
         console.error("Error:", error);

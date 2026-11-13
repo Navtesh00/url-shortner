@@ -10,3 +10,13 @@ export const visitJobsQueue = new Queue("visit-jobs", {
     removeOnFail: false,
   },
 });
+
+export const flushJobsQueue = new Queue("flush-jobs", {
+  connection: client,
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: "fixed", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});

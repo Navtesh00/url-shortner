@@ -2,14 +2,26 @@ jest.mock("../../src/config/redis.js", () => ({
     get: jest.fn(),
     set: jest.fn(),
     exists: jest.fn(),
+    incr: jest.fn(),
+    sadd: jest.fn(),
+    srem: jest.fn(),
+    rename: jest.fn(),
+    del: jest.fn(),
+    sscan: jest.fn(),
 }));
 
 import client from "../../src/config/redis.js";
 import {
     getCachedUrl,
+    setCache,
+    bufferIncr,
+    markDirty,
     getCachedNotFoundUrl,
-    setCacheUrl,
     setCacheNotFoundUrl,
+    bufferKey,
+    dirtyKey,
+    flushKey,
+    cacheKey,
 } from "../../src/services/url_cache_service.js";
 
 describe("url_cache_service", () => {
@@ -22,41 +34,55 @@ describe("url_cache_service", () => {
             expect(client.get).toHaveBeenCalledWith(expect.stringContaining(":url:abc"));
         });
 
-        it("parses and returns the JSON record on hit", async () => {
-            client.get.mockResolvedValue(JSON.stringify({ _id: "1", longURL: "https://x.com" }));
-            expect(await getCachedUrl("abc")).toEqual({ _id: "1", longURL: "https://x.com" });
-        });
-
-        it("returns null when the cached value is not valid JSON", async () => {
-            client.get.mockResolvedValue("not-json");
-            expect(await getCachedUrl("abc")).toBeNull();
+        it("returns the bare long URL string on hit", async () => {
+            client.get.mockResolvedValue("https://example.com");
+            expect(await getCachedUrl("abc")).toBe("https://example.com");
         });
     });
 
-    describe("setCacheUrl", () => {
-        it("stores a JSON string record with the URL TTL", async () => {
+    describe("setCache", () => {
+        it("stores a bare long URL string with EX TTL", async () => {
             client.set.mockResolvedValue("OK");
-            await setCacheUrl("abc", {
-                _id: "1",
-                longURL: "https://x.com",
-                shortURL: "abc",
-                totalVisits: 3,
-                lastVisitedAt: null,
-            });
+            await setCache("abc", "https://example.com");
 
             expect(client.set).toHaveBeenCalledWith(
                 expect.stringContaining(":url:abc"),
-                expect.stringContaining('"_id":"1"'),
+                "https://example.com",
                 "EX",
                 expect.any(Number),
             );
         });
+    });
 
-        it("includes _id in the cached record", async () => {
-            client.set.mockResolvedValue("OK");
-            await setCacheUrl("abc", { _id: "1", longURL: "https://x.com", shortURL: "abc" });
-            const payload = client.set.mock.calls[0][1];
-            expect(JSON.parse(payload)).toHaveProperty("_id", "1");
+    describe("bufferIncr", () => {
+        it("increments per-code buffer without TTL", async () => {
+            client.incr.mockResolvedValue(3);
+            const result = await bufferIncr("abc");
+            expect(result).toBe(3);
+            expect(client.incr).toHaveBeenCalledWith(expect.stringContaining(":buffer:abc"));
+        });
+    });
+
+    describe("markDirty", () => {
+        it("adds code to dirty set without TTL", async () => {
+            client.sadd.mockResolvedValue(1);
+            await markDirty("abc");
+            expect(client.sadd).toHaveBeenCalledWith(expect.stringContaining(":dirty"), "abc");
+        });
+    });
+
+    describe("key builders", () => {
+        it("builds cache key", () => {
+            expect(cacheKey("abc")).toContain(":url:abc");
+        });
+        it("builds buffer key", () => {
+            expect(bufferKey("abc")).toContain(":buffer:abc");
+        });
+        it("builds dirty key", () => {
+            expect(dirtyKey).toContain(":dirty");
+        });
+        it("builds flush key", () => {
+            expect(flushKey("abc", 1000)).toContain(":flush:abc:1000");
         });
     });
 

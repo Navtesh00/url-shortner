@@ -1,8 +1,15 @@
 import Url from "../models/url_models.js";
 import generateShortCode from "./generate_code.js";
-import { getCachedUrl, getCachedNotFoundUrl, setCacheUrl, setCacheNotFoundUrl } from "./url_cache_service.js";
 import { isValidCode } from "../utils/validators.js";
 import { AppError } from "../utils/errors.js";
+import {
+    getCachedUrl,
+    setCache,
+    getCachedNotFoundUrl,
+    setCacheNotFoundUrl,
+    bufferIncr,
+    markDirty,
+} from "./url_cache_service.js";
 
 const generateUniqueShortCode = async () => {
     let shortURL = generateShortCode();
@@ -39,14 +46,17 @@ export const resolveLongUrl = async (code) => {
         throw new AppError("Not found URL", 404);
     }
 
-    let cached;
+    let longURL;
     try {
-        cached = await getCachedUrl(code);
-        if (cached?._id) {
-            return cached;
-        }
+        longURL = await getCachedUrl(code);
     } catch {
         console.log("Failed to get cached URL");
+    }
+
+    if (longURL) {
+        await bufferIncr(code);
+        await markDirty(code);
+        return longURL;
     }
 
     const url = await Url.findOne({ shortURL: code });
@@ -57,12 +67,15 @@ export const resolveLongUrl = async (code) => {
     }
 
     try {
-        await setCacheUrl(code, url);
+        await setCache(code, url.longURL);
     } catch {
         console.log("Failed to set cached URL");
     }
 
-    return url;
+    await bufferIncr(code);
+    await markDirty(code);
+
+    return url.longURL;
 }
 
 export const getUrlStats = async (code) => {
@@ -75,18 +88,11 @@ export const getUrlStats = async (code) => {
         throw new AppError("URL not found", 404);
     }
 
-    // even when a redirect served the visit from cache.
     const url = await Url.findOne({ shortURL: code });
 
     if (!url) {
         await setCacheNotFoundUrl(code);
         throw new AppError("URL not found", 404);
-    }
-
-    try {
-        await setCacheUrl(code, url);
-    } catch {
-        console.log("Failed to set cached URL");
     }
 
     return url;

@@ -6,8 +6,10 @@ jest.mock("../../src/services/generate_code.js", () => jest.fn(() => "AAAAAA"));
 jest.mock("../../src/services/url_cache_service.js", () => ({
     getCachedUrl: jest.fn(),
     getCachedNotFoundUrl: jest.fn(),
-    setCacheUrl: jest.fn(),
+    setCache: jest.fn(),
     setCacheNotFoundUrl: jest.fn(),
+    bufferIncr: jest.fn(),
+    markDirty: jest.fn(),
 }));
 jest.mock("../../src/utils/validators.js", () => ({
     isValidCode: jest.fn((code) => typeof code === "string" && /^[a-zA-Z0-9]{6}$/.test(code)),
@@ -26,8 +28,10 @@ import Url from "../../src/models/url_models.js";
 import {
     getCachedUrl,
     getCachedNotFoundUrl,
-    setCacheUrl,
+    setCache,
     setCacheNotFoundUrl,
+    bufferIncr,
+    markDirty,
 } from "../../src/services/url_cache_service.js";
 import { isValidCode } from "../../src/utils/validators.js";
 import { AppError } from "../../src/utils/errors.js";
@@ -97,33 +101,20 @@ describe("resolveLongUrl", () => {
         });
     });
 
-    it("returns cached record without calling Mongo when cache has _id", async () => {
+    it("returns cached long URL on hit and buffers increment", async () => {
         mockCodeValid(isValidCode);
         mockNotInNegativeCache(getCachedNotFoundUrl);
-        const cached = makeCachedUrlDoc();
-        mockUrlCacheHit(getCachedUrl, cached);
+        mockUrlCacheHit(getCachedUrl, "https://cached.com");
 
         const result = await resolveLongUrl(VALID_CODE);
 
-        expect(result).toEqual(cached);
+        expect(result).toBe("https://cached.com");
         expect(Url.findOne).not.toHaveBeenCalled();
+        expect(bufferIncr).toHaveBeenCalledWith(VALID_CODE);
+        expect(markDirty).toHaveBeenCalledWith(VALID_CODE);
     });
 
-    it("falls through to Mongo when cached record has no _id", async () => {
-        mockCodeValid(isValidCode);
-        mockNotInNegativeCache(getCachedNotFoundUrl);
-        mockUrlCacheHit(getCachedUrl, { longURL: "https://no-id.com" });
-
-        const doc = makeUrlDoc();
-        Url.findOne.mockResolvedValue(doc);
-
-        const result = await resolveLongUrl(VALID_CODE);
-
-        expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
-        expect(result).toBe(doc);
-    });
-
-    it("falls back to MongoDB on cache miss and caches the record", async () => {
+    it("falls through to Mongo when cache misses", async () => {
         mockCodeValid(isValidCode);
         mockNotInNegativeCache(getCachedNotFoundUrl);
         mockUrlCacheMiss(getCachedUrl);
@@ -133,8 +124,10 @@ describe("resolveLongUrl", () => {
         const result = await resolveLongUrl(VALID_CODE);
 
         expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
-        expect(setCacheUrl).toHaveBeenCalledWith(VALID_CODE, doc);
-        expect(result).toBe(doc);
+        expect(setCache).toHaveBeenCalledWith(VALID_CODE, doc.longURL);
+        expect(bufferIncr).toHaveBeenCalledWith(VALID_CODE);
+        expect(markDirty).toHaveBeenCalledWith(VALID_CODE);
+        expect(result).toBe(doc.longURL);
     });
 
     it("calls setCacheNotFoundUrl before throwing when Mongo returns null", async () => {
@@ -186,21 +179,21 @@ describe("resolveLongUrl", () => {
         const result = await resolveLongUrl(VALID_CODE);
 
         expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
-        expect(result).toBe(doc);
+        expect(result).toBe(doc.longURL);
     });
 
-    it("returns the Mongo record even when setCacheUrl throws", async () => {
+    it("returns the Mongo longURL even when setCache throws", async () => {
         mockCodeValid(isValidCode);
         mockNotInNegativeCache(getCachedNotFoundUrl);
         mockUrlCacheMiss(getCachedUrl);
-        setCacheUrl.mockRejectedValue(new Error("redis set failed"));
+        setCache.mockRejectedValue(new Error("redis set failed"));
 
         const doc = makeUrlDoc();
         Url.findOne.mockResolvedValue(doc);
 
         const result = await resolveLongUrl(VALID_CODE);
 
-        expect(result).toBe(doc);
+        expect(result).toBe(doc.longURL);
     });
 });
 
@@ -238,7 +231,7 @@ describe("getUrlStats", () => {
         expect(Url.findOne).not.toHaveBeenCalled();
     });
 
-    it("reads from MongoDB and caches the record on success", async () => {
+    it("reads from MongoDB", async () => {
         mockCodeValid(isValidCode);
         mockNotInNegativeCache(getCachedNotFoundUrl);
         const doc = makeUrlDoc({ totalVisits: 5 });
@@ -247,7 +240,6 @@ describe("getUrlStats", () => {
         const result = await getUrlStats(VALID_CODE);
 
         expect(Url.findOne).toHaveBeenCalledWith({ shortURL: VALID_CODE });
-        expect(setCacheUrl).toHaveBeenCalledWith(VALID_CODE, doc);
         expect(result).toBe(doc);
     });
 
@@ -256,18 +248,5 @@ describe("getUrlStats", () => {
         getCachedNotFoundUrl.mockRejectedValue(new Error("redis stats failed"));
 
         await expect(getUrlStats(VALID_CODE)).rejects.toThrow("redis stats failed");
-    });
-
-    it("returns the Mongo record even when setCacheUrl throws", async () => {
-        mockCodeValid(isValidCode);
-        mockNotInNegativeCache(getCachedNotFoundUrl);
-        setCacheUrl.mockRejectedValue(new Error("redis stats set failed"));
-
-        const doc = makeUrlDoc({ totalVisits: 5 });
-        Url.findOne.mockResolvedValue(doc);
-
-        const result = await getUrlStats(VALID_CODE);
-
-        expect(result).toBe(doc);
     });
 });

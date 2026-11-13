@@ -1,7 +1,7 @@
 import { createShortUrl, resolveLongUrl, getUrlStats } from "../services/url_service.js";
 import { isValidUrl } from "../utils/validators.js";
 import { AppError } from "../utils/errors.js";
-import { enqueueVisitJob } from "../jobs/visit_job_producer.js";
+import { produceFlushJob } from "../jobs/flush_job_producer.js";
 
 export const shortenUrl = async (req, res) => {
 
@@ -17,11 +17,11 @@ export const shortenUrl = async (req, res) => {
 }
 
 export const redirectToLongUrl = async (req, res) => {
-    const url = await resolveLongUrl(req.params.code);
+    const longURL = await resolveLongUrl(req.params.code);
 
-    enqueueVisitJob({ urlId: url._id, shortCode: req.params.code, visitedAt: new Date() }).catch(() => {});
+    await produceFlushJob(req.params.code).catch(() => {});
 
-    res.redirect(302, url.longURL);
+    res.redirect(302, longURL);
 }
 
 export const fetchUrlStats = async (req, res) => {
