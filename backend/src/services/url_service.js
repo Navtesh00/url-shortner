@@ -1,5 +1,5 @@
 import Url from "../models/url_models.js";
-import generateShortCode from "./generate_code.js";
+import generateShortCode, { generateShortCodeBatch } from "./generate_code.js";
 import { isValidCode } from "../utils/validators.js";
 import { AppError } from "../utils/errors.js";
 import {
@@ -11,20 +11,36 @@ import {
     markDirty,
 } from "./url_cache_service.js";
 
-const generateUniqueShortCode = async () => {
-    let shortURL = generateShortCode();
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 100;
 
-    while (await Url.findOne({ shortURL })) {
-        shortURL = generateShortCode();
+const generateUniqueShortCode = async () => {
+    let attempts = 0;
+
+    while (attempts < MAX_RETRIES) {
+        const candidates = generateShortCodeBatch();
+        const existing = await Url.findOne({ shortURL: { $in: candidates } });
+        const existingSet = existing ? new Set([existing.shortURL]) : new Set();
+
+        for (const code of candidates) {
+            if (!existingSet.has(code)) {
+                return code;
+            }
+        }
+
+        attempts++;
+        if (attempts < MAX_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempts));
+        }
     }
 
-    return shortURL;
+    throw new AppError("Failed to generate unique short code", 500);
 }
 
 export const createShortUrl = async (longURL) => {
     const shortURL = await generateUniqueShortCode();
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < MAX_RETRIES; i++) {
         try {
             return await Url.create({ longURL, shortURL });
         } catch (error) {

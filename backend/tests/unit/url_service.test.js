@@ -2,7 +2,11 @@ jest.mock("../../src/models/url_models.js", () => ({
     findOne: jest.fn(),
     create: jest.fn(),
 }));
-jest.mock("../../src/services/generate_code.js", () => jest.fn(() => "AAAAAA"));
+jest.mock("../../src/services/generate_code.js", () => ({
+    __esModule: true,
+    default: jest.fn(() => "AAAAAA"),
+    generateShortCodeBatch: jest.fn(() => ["AAAAAA", "BBBBBB", "CCCCCC", "DDDDDD", "EEEEEE", "FFFFFF", "GGGGGG", "HHHHHH", "IIIIII", "JJJJJJ"]),
+}));
 jest.mock("../../src/services/url_cache_service.js", () => ({
     getCachedUrl: jest.fn(),
     getCachedNotFoundUrl: jest.fn(),

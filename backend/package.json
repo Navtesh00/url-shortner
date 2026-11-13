@@ -23,12 +23,18 @@
   "jest": {
     "testEnvironment": "node",
     "rootDir": ".",
-    "roots": ["<rootDir>/tests"],
-    "testMatch": ["**/*.test.js"],
+    "roots": [
+      "<rootDir>/tests"
+    ],
+    "testMatch": [
+      "**/*.test.js"
+    ],
     "transform": {
       "^.+\\.[m]?js$": "babel-jest"
     },
-    "transformIgnorePatterns": ["<rootDir>/node_modules/(?!nanoid)"],
+    "transformIgnorePatterns": [
+      "<rootDir>/node_modules/(?!nanoid)"
+    ],
     "collectCoverageFrom": [
       "src/**/*.js",
       "!src/config/db.js",
@@ -46,8 +52,12 @@
   },
   "dependencies": {
     "bullmq": "^6.3.11",
+    "compression": "^1.8.2",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0",
     "ioredis": "^6.0.0",
     "mongoose": "^9.10.1",
     "nanoid": "^6.0.1",

@@ -164,8 +164,8 @@ npm run dev
 
 ```env
 PORT=3001
-# NOTE: `Mongo_URI` casing is intentional — matches the code. Change both together.
-Mongo_URI=mongodb://127.0.0.1:27017/url_shortener
+# NOTE: `MONGO_URI` casing is intentional — matches the code. Change both together.
+MONGO_URI=mongodb://127.0.0.1:27017/url_shortener
 REDIS_HOST=localhost
 REDIS_PORT=6379
 KEY_PREFIX=urlShortener:dev
@@ -632,7 +632,7 @@ The local setup targets development. Before exposing publicly:
 
 | Symptom | Likely cause | What to check |
 |---|---|---|
-| MongoDB connection refused | Mongo stopped / bad `Mongo_URI` / Atlas IP not whitelisted | Start Mongo; verify URI; add your IP in Atlas Network Access. |
+| MongoDB connection refused | Mongo stopped / bad `MONGO_URI` / Atlas IP not whitelisted | Start Mongo; verify URI; add your IP in Atlas Network Access. |
 | Redis connection refused on `6379` | Redis stopped / wrong host or port | Start Redis; check `REDIS_HOST`, `REDIS_PORT`. |
 | `EADDRINUSE :::3001` | Port already in use | Stop the other process or change `PORT` — then update `BACKEND_URL` and `NEXT_PUBLIC_API_URL`. The **worker** doesn't bind the API port. |
 | Frontend can't reach the API | Rewrite target or path wrong | Verify `BACKEND_URL` and `/backend/*` rewrite; `/backend/api/url_shortener` → `http://localhost:3001/api/url_shortener`. |

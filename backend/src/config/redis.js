@@ -17,6 +17,11 @@ client.on("error", (err) => {
 });
 
 export const validateRedisConfig = async () => {
+    if (process.env.NODE_ENV !== "production") {
+        console.log("Skipping Redis config validation in non-production environment");
+        return;
+    }
+
     const appendonly = await client.config("GET", "appendonly");
     const maxmemoryPolicy = await client.config("GET", "maxmemory-policy");
     const maxmemory = await client.config("GET", "maxmemory");
