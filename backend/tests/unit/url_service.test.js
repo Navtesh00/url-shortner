@@ -1,5 +1,6 @@
 jest.mock("../../src/models/url_models.js", () => ({
     findOne: jest.fn(),
+    find: jest.fn(),
     create: jest.fn(),
 }));
 jest.mock("../../src/services/generate_code.js", () => ({
@@ -52,7 +53,10 @@ import {
 } from "./helpers/urlServiceTestUtils.js";
 
 describe("createShortUrl", () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        Url.find.mockResolvedValue([]);
+    });
 
     it("creates and returns a URL document", async () => {
         const doc = makeUrlDoc();
@@ -141,7 +145,7 @@ describe("resolveLongUrl", () => {
         Url.findOne.mockResolvedValue(null);
 
         await expect(resolveLongUrl(VALID_CODE)).rejects.toMatchObject({
-            message: "UR not found",
+            message: "URL not found",
             statusCode: 404,
         });
         expect(setCacheNotFoundUrl).toHaveBeenCalledWith(VALID_CODE);

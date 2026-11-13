@@ -1,5 +1,6 @@
 import Redis from "ioredis";
 import dotenv from "dotenv";
+import { logger } from "../utils/logger.js";
 dotenv.config();
 
 const client = new Redis({
@@ -9,16 +10,16 @@ const client = new Redis({
 });
 
 client.on("connect", () => {
-    console.log("Redis connected");
+    logger.info("Redis connected");
 });
 
 client.on("error", (err) => {
-    console.log("Redis error :", err);
+    logger.error("Redis error", err);
 });
 
 export const validateRedisConfig = async () => {
     if (process.env.NODE_ENV !== "production") {
-        console.log("Skipping Redis config validation in non-production environment");
+        logger.info("Skipping Redis config validation in non-production environment");
         return;
     }
 
@@ -40,7 +41,7 @@ export const validateRedisConfig = async () => {
         throw new Error("Redis maxmemory must be set to a non-zero value");
     }
 
-    console.log("Redis config validated: appendonly=yes, maxmemory-policy=volatile-lru, maxmemory=" + maxmemoryVal);
+    logger.info("Redis config validated", { appendonly: "yes", "maxmemory-policy": "volatile-lru", maxmemory: maxmemoryVal });
 };
 
 export default client;

@@ -2,6 +2,7 @@ import { createShortUrl, resolveLongUrl, getUrlStats } from "../services/url_ser
 import { isValidUrl } from "../utils/validators.js";
 import { AppError } from "../utils/errors.js";
 import { produceFlushJob } from "../jobs/flush_job_producer.js";
+import { logger } from "../utils/logger.js";
 
 export const shortenUrl = async (req, res) => {
 
@@ -19,7 +20,9 @@ export const shortenUrl = async (req, res) => {
 export const redirectToLongUrl = async (req, res) => {
     const longURL = await resolveLongUrl(req.params.code);
 
-    await produceFlushJob(req.params.code).catch(() => {});
+    await produceFlushJob(req.params.code).catch((err) => {
+        logger.error("Failed to enqueue flush job", err);
+    });
 
     res.redirect(302, longURL);
 }

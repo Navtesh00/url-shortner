@@ -115,13 +115,13 @@ describe("url_controllers", () => {
         });
 
         it("throws 404 when URL is not found", async () => {
-            const err = new AppError("UR not found", 404);
+            const err = new AppError("URL not found", 404);
             resolveLongUrl.mockRejectedValue(err);
             const req = { params: { code: "AAAAAA" } };
             const res = mockRes();
 
             await expect(redirectToLongUrl(req, res)).rejects.toMatchObject({
-                message: "UR not found",
+                message: "URL not found",
                 statusCode: 404,
             });
         });

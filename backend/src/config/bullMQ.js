@@ -8,15 +8,6 @@ const baseJobOptions = {
     removeOnFail: false,
 };
 
-export const visitJobsQueue = new Queue("visit-jobs", {
-  connection: client,
-  defaultJobOptions: {
-    ...baseJobOptions,
-    attempts: isProduction ? 5 : 2,
-    backoff: { type: "exponential", delay: isProduction ? 1000 : 2000 },
-  },
-});
-
 export const flushJobsQueue = new Queue("flush-jobs", {
   connection: client,
   defaultJobOptions: {

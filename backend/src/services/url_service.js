@@ -2,6 +2,7 @@ import Url from "../models/url_models.js";
 import generateShortCode, { generateShortCodeBatch } from "./generate_code.js";
 import { isValidCode } from "../utils/validators.js";
 import { AppError } from "../utils/errors.js";
+import { logger } from "../utils/logger.js";
 import {
     getCachedUrl,
     setCache,
@@ -19,8 +20,8 @@ const generateUniqueShortCode = async () => {
 
     while (attempts < MAX_RETRIES) {
         const candidates = generateShortCodeBatch();
-        const existing = await Url.findOne({ shortURL: { $in: candidates } });
-        const existingSet = existing ? new Set([existing.shortURL]) : new Set();
+        const existing = await Url.find({ shortURL: { $in: candidates } });
+        const existingSet = new Set(existing.map((doc) => doc.shortURL));
 
         for (const code of candidates) {
             if (!existingSet.has(code)) {
@@ -65,8 +66,8 @@ export const resolveLongUrl = async (code) => {
     let longURL;
     try {
         longURL = await getCachedUrl(code);
-    } catch {
-        console.log("Failed to get cached URL");
+    } catch (err) {
+        logger.error("Failed to get cached URL", err);
     }
 
     if (longURL) {
@@ -79,13 +80,13 @@ export const resolveLongUrl = async (code) => {
 
     if (!url) {
         await setCacheNotFoundUrl(code);
-        throw new AppError("UR not found", 404);
+        throw new AppError("URL not found", 404);
     }
 
     try {
         await setCache(code, url.longURL);
-    } catch {
-        console.log("Failed to set cached URL");
+    } catch (err) {
+        logger.error("Failed to set cached URL", err);
     }
 
     await bufferIncr(code);

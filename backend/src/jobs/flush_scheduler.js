@@ -1,5 +1,6 @@
-import { flushJobsQueue } from "./config/bullMQ.js";
-import { FLUSH_VISIT_COUNTS } from "./jobs/job_names.js";
+import { flushJobsQueue } from "../config/bullMQ.js";
+import { FLUSH_VISIT_COUNTS } from "./job_names.js";
+import { logger } from "../utils/logger.js";
 
 const WINDOW_SECONDS = 60;
 const SCHEDULER_INTERVAL_MS = 10 * 60 * 1000;
@@ -16,7 +17,7 @@ export const startFlushScheduler = () => {
             const ws = windowStart();
             await flushJobsQueue.add(FLUSH_VISIT_COUNTS, { windowStart: ws });
         } catch (err) {
-            console.error("Flush scheduler tick failed:", err);
+            logger.error("Flush scheduler tick failed", err);
         }
     };
 

@@ -1,7 +1,8 @@
 import { AppError } from "../utils/errors.js";
+import { logger } from "../utils/logger.js";
 
 export const errorHandler = (err, req, res, next) => {
-    console.log(err);
+    logger.error("Unhandled error", err);
 
     //Error thrown by the application layer
     if (err instanceof AppError) {
