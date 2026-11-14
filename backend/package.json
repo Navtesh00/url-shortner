@@ -41,6 +41,7 @@
       "!src/config/bullMQ.js",
       "!src/workers/**/*.js"
     ],
+    "coverageReporters": ["text", "json", "json-summary"],
     "coverageThreshold": {
       "global": {
         "branches": 70,
