@@ -29,7 +29,7 @@ export const validateRedisConfig = async () => {
 
     const appendonlyVal = appendonly[1];
     const policyVal = maxmemoryPolicy[1];
-    const maxmemoryVal = parseInt(maxmemory[1], 10);
+    const maxmemoryVal = Number.parseInt(maxmemory[1], 10);
 
     if (appendonlyVal !== "yes") {
         throw new Error(`Redis appendonly must be "yes", got "${appendonlyVal}"`);

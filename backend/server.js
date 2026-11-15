@@ -43,4 +43,6 @@ import mongoose from "mongoose";
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
-start();
+// start() is intentionally not awaited: it runs forever while the process lives,
+// and its internal try/catch logs errors and exits on failure.
+void start();

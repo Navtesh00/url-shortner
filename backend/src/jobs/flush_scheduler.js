@@ -21,7 +21,9 @@ export const startFlushScheduler = () => {
         }
     };
 
-    tick();
+    // tick() is intentionally not awaited: it runs on an interval and its internal
+    // try/catch logs errors without rejecting. Awaiting here would block scheduler setup.
+    void tick();
     timer = setInterval(tick, SCHEDULER_INTERVAL_MS);
     timer.unref();
 };

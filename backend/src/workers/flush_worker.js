@@ -31,7 +31,7 @@ export const processFlushJob = async (job) => {
             }
 
             const countRaw = await client.get(flush);
-            const count = parseInt(countRaw, 10) || 0;
+            const count = Number.parseInt(countRaw, 10) || 0;
 
             if (count > 0) {
                 await URL.findOneAndUpdate(

@@ -5,7 +5,8 @@ const CACHE_NOT_FOUND_TTL_SECONDS = 60 * 30;
 
 const key_prefix = (process.env.KEY_PREFIX || "urlShortener:dev")
     .trim()
-    .replace(/^["']|["']$/g, "")
+    .replace(/^["']/, "")
+    .replace(/["']$/, "")
     .replace(/;+$/, "")
     .trim() || "urlShortener:dev";
 

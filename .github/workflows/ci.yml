@@ -33,30 +33,30 @@ jobs:
         working-directory: backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run tests with coverage
         run: npm test -- --coverage
 
       - name: Publish coverage badge
-        uses: tj-actions/coverage-badge-js@v2
+        uses: tj-actions/coverage-badge-js@03671608d77965ef0048c3332432752bdf1e1473 # v2
         with:
           report_path: backend/coverage/coverage-summary.json
           output_path: backend/coverage/coverage.svg
 
       - name: Commit coverage badge
         if: github.event_name == 'push'
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403 # v5
         with:
           commit_message: Update coverage badge
           branch: ${{ github.ref_name }}
